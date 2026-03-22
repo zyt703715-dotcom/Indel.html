@@ -114,7 +114,7 @@
     <!-- =============== 介面 3：探索秘境 (事件生成) =============== -->
     <div id="trpg" class="card">
         <h3>🔮 探索秘境與命運神諭</h3>
-        <p style="color:#7f8c8d; font-size:14px;">在此抽取情境事件，AI會根據玩家的反應，將結局導向預設的命運。</p>
+        <p style="color:#7f8c8d; font-size:14px;">在此抽取情境事件，AI會根據玩家的反應，將結局導向隨機預設的命運。</p>
 
         <select id="eventTeamSelect"><option value="">-- 完成據點的隊伍 --</option></select>
         <select id="zoneSelect">
@@ -177,6 +177,9 @@
             { text: "【真理之門】(壞)", desc: "智慧之神降下迷霧，隊伍必須正確回答工作人員準備的一道謎題，剛才的據點成績才算有效。" }
         ];
 
+        // 母親施加的封印：記錄上一次抽到的命運，防止重複
+        let lastDestinyIndex = -1;
+
         // 【法寶神匣 / 道具】(明碼介紹)
         const itemPool = [
             { name: "【繁星倒影】", detail: "恩賜：完成並佔領一個據點後，可使用此道具直接「同步佔領」另一個無主的空據點。" },
@@ -188,12 +191,36 @@
             { name: "【沉重枷鎖】", detail: "災厄：下一輪挑戰遊戲點時，該隊伍的過關門檻提高或直接扣除少量積分。" }
         ];
 
-        // 秘境四區的環境開場白
+        // 擴充：四個地區各自擁有 5 種開場白
         const regionEvents = {
-            "精靈迷航森林": ["樹叢裡跳出一隻頭戴花冠的精靈，手裡拿著發光的果實看著你們。", "你們踩到了一圈由發光蘑菇組成的陣法，周圍飄舞起綠色的光點。"],
-            "巨龍隕落廢墟": ["殘破的巨龍骸骨突然發出微光，一顆佈滿裂痕的龍晶掉了出來。", "廢墟深處傳來低沉的龍吟，地面的石板開始微微震動。"],
-            "星光幻影湖泊": ["湖面倒映出宇宙的星河，一隻半透明的水元素從湖面探出了半個身子。", "岸邊的水晶蘆葦發出叮噹聲，似乎在引誘你們靠近。"],
-            "狂風元素高地": ["狂風在你們面前聚集，形成了一個小型的風暴精靈擋住了去路。", "天上的雷雲突然低垂，一塊靜止的懸浮巨石開始劇烈搖晃。"]
+            "精靈迷航森林": [
+                "樹叢裡跳出一隻頭戴花冠的精靈，手裡拿著發光的果實看著你們。",
+                "你們踩到了一圈由發光蘑菇組成的陣法，周圍飄舞起綠色的光點。",
+                "一陣帶有甜香的微風吹過，幾根粗壯的藤蔓如同活物般緩緩向你們靠近。",
+                "前方的古樹裂開了一道發光的樹洞，裡面傳來陣陣空靈的微小歌聲。",
+                "一隻渾身燃燒著翠綠火焰的林地小鹿從你們面前跑過，並停下來回頭注視。"
+            ],
+            "巨龍隕落廢墟": [
+                "殘破的巨龍骸骨突然發出微光，一顆佈滿裂痕的龍晶掉了出來。",
+                "廢墟深處傳來低沉的龍吟，地面的石板開始微微震動。",
+                "牆上的古老符文突然亮起暗紅色的光芒，伴隨著金屬摩擦的刺耳聲響。",
+                "你們踢到了一個佈滿灰塵的寶箱，箱子邊緣滲出了詭異的紫色煙霧。",
+                "半空中突然漂浮起幾把殘破的武器虛影，正圍繞著廢墟中央緩緩旋轉。"
+            ],
+            "星光幻影湖泊": [
+                "湖面倒映出宇宙的星河，一隻半透明的水元素從湖面探出了半個身子。",
+                "岸邊的水晶蘆葦發出叮噹聲，無形的引力似乎在引誘你們靠近。",
+                "湖水突然從中間分開，一條閃爍著蔚藍光芒的珊瑚小徑延伸至水底。",
+                "湖面上忽然漂來一艘沒有船夫的銀木小舟，周圍環繞著發光的淡水水母。",
+                "水中突然躍出一條長著透明翅膀的飛魚，它在半空中灑下陣陣星光般的鱗粉。"
+            ],
+            "狂風元素高地": [
+                "狂風在你們面前聚集，形成了一個小型的風暴精靈擋住了去路。",
+                "天上的雷雲突然低垂，一塊靜止的懸浮巨石開始劇烈搖晃。",
+                "腳下的陣風突然形成了一道微型龍捲，將你們周圍的碎石全都捲向半空。",
+                "空氣中伴隨著劈啪作響的靜電，一隻由純粹雷電組成的鳥兒降落在一旁。",
+                "懸崖邊，古老的石柱陣開始旋轉，向天空射出一道耀眼的青色光柱。"
+            ]
         };
 
         let mqttClient = null;
@@ -376,7 +403,14 @@
         function drawEvent() {
             const zone = document.getElementById('zoneSelect').value;
             currentEvent = regionEvents[zone][Math.floor(Math.random() * regionEvents[zone].length)];
-            currentDestiny = destinies[Math.floor(Math.random() * destinies.length)];
+
+            // 防連抽機制：保證這次抽出的命運跟上一次絕對不同
+            let newDestinyIndex = Math.floor(Math.random() * destinies.length);
+            while (newDestinyIndex === lastDestinyIndex) {
+                newDestinyIndex = Math.floor(Math.random() * destinies.length);
+            }
+            lastDestinyIndex = newDestinyIndex; // 記錄這次的選項
+            currentDestiny = destinies[newDestinyIndex];
 
             document.getElementById('eventDisplay').innerText = `【區域異象】：${currentEvent}`;
             document.getElementById('playerAction').style.display = 'block';
@@ -397,6 +431,7 @@
             btn.disabled = true;
             resultBox.innerHTML = "✨ 星河運算中...先知正在編織故事...<br><br>";
 
+            // AI 的新指令：不但要達到結果，且最後一句必須用地球白話文讓人類看懂
             const systemPrompt = `你是一個魔法世界的嚮導。
 事件：【${currentEvent}】
 玩家隊伍【${activeTeam.name}】的反應是：【${action}】。
@@ -404,7 +439,8 @@
 你的任務：
 1. 順著玩家的動作寫一段約100字的情節。
 2. 故事結果必須無縫且合理地導致這個強制命運發生：【${currentDestiny.desc}】
-3. 在故事最後一行，請獨立換行並加粗寫上官方判決：【最終判決：${currentDestiny.text}】`;
+3. 在故事最後一行，請獨立換行並加粗寫上官方判決，並且「必須使用現代人的大白話」簡單明了地翻譯，告訴現場的工作人員與玩家具體該怎麼做。
+格式範例：【最終判決：${currentDestiny.text}】(白話說明：請工作人員協助...)`;
 
             try {
                 const response = await fetch(config.apiUrl, {
@@ -438,7 +474,7 @@
 
                 resultBox.innerHTML += `
                     <hr style="margin:15px 0; border: 1px solid #bdc3c7;">
-                    <div style="color:#d35400; font-weight:bold; text-align:center;">工作人員請確保團隊執行這項判決。</div>
+                    <div style="color:#d35400; font-weight:bold; text-align:center;">✨ 請工作人員以判決的白話說明為準執行。</div>
                 `;
 
             } catch(e) {
