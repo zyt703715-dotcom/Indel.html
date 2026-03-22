@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova的魔法試煉：終極星網版</title>
+    <!-- 母親引入的光速傳輸陣 (MQTT) -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        :root { --primary: #2c3e50; --magic: #8e44ad; --bg: #f4f6f7; --color-blue: #3498db; --color-green: #2ecc71; --color-yellow: #f1c40f; }
+        body { font-family: 'Georgia', serif; background: var(--bg); color: #2c3e50; padding: 20px; text-align: center; margin: 0; min-height: 100vh; background-image: radial-gradient(circle, #e8f8f5 0%, #d4e6f1 100%); overflow-x: hidden; }
+
+        /* 導航按鈕 */
+        .nav-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-bottom: 20px; }
+        .nav-buttons button { padding: 12px 18px; font-size: 16px; border: 2px solid #fff; background: var(--primary); color: white; border-radius: 10px; cursor: pointer; transition: 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .nav-buttons button.active-nav { background: var(--magic); transform: scale(1.05); }
+
+        /* 卡片容器 */
+        .card { background: rgba(255, 255, 255, 0.95); padding: 30px; border-radius: 16px; box-shadow: 0 8px 25px rgba(0,0,0,0.1); display: none; margin: 0 auto 20px auto; max-width: 800px; border: 1px solid #dcdde1; }
+        .active { display: block; }
+
+        select, input { margin: 10px 0; padding: 15px; width: 100%; max-width: 400px; font-size: 18px; border-radius: 10px; border: 2px solid #bdc3c7; box-sizing: border-box; }
+        .action-btn { background: #e67e22; color: white; border: none; font-weight: bold; cursor: pointer; padding: 15px; font-size: 18px; width: 100%; max-width: 400px; border-radius: 10px; margin-top: 10px; box-shadow: 0 4px 10px rgba(230, 126, 34, 0.3); }
+
+        .result-box { margin-top: 20px; padding: 20px; background: #fdfefe; border-radius: 12px; min-height: 100px; text-align: left; border-left: 6px solid var(--magic); line-height: 1.8; font-size: 18px; }
+
+        /* 地圖網格與封印功能 */
+        .map-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 20px; }
+        .map-point { padding: 25px; border-radius: 16px; display: flex; flex-direction: column; align-items: flex-start; box-shadow: 0 6px 15px rgba(0,0,0,0.08); transition: all 0.5s ease; border: 2px solid #eee; background-color: #ffffff; position: relative; }
+        .map-point.locked { background: #ecf0f1 !important; border: 2px dashed #95a5a6 !important; filter: grayscale(80%); }
+        .map-point .title { font-size: 22px; font-weight: bold; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; color: #2c3e50; }
+        .lock-btn { position: absolute; top: 15px; right: 15px; background: #e74c3c; color: white; border: none; padding: 6px 12px; border-radius: 5px; cursor: pointer; font-size: 14px; font-weight: bold; }
+        .locked-btn-style { background: #27ae60; }
+
+        /* 隊伍顏色選擇 */
+        .color-selector { display: flex; justify-content: center; gap: 15px; margin: 15px 0; }
+        .color-option { width: 40px; height: 40px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: 0.2s; }
+        .color-option[data-color="blue"] { background: var(--color-blue); }
+        .color-option[data-color="green"] { background: var(--color-green); }
+        .color-option[data-color="yellow"] { background: var(--color-yellow); }
+        .color-option.selected { border-color: #2c3e50; transform: scale(1.2); }
+
+        /* 星雲同步徽章與指示燈 */
+        .sync-badge { position: fixed; top: 10px; right: 20px; background: #27ae60; color: white; padding: 8px 15px; border-radius: 20px; font-size: 14px; z-index: 1000; display: none; font-weight: bold; }
+        #syncStatusUI { margin: 20px auto; padding: 15px; border-radius: 10px; max-width: 400px; text-align: left; border: 2px solid transparent; transition: 0.3s; background: #f4f6f7; border-color: #bdc3c7; color: #2c3e50; }
+
+        /* 背包彈窗與歷史紀錄 */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1001; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
+        .modal-content { background: #fff; padding: 30px; border-radius: 20px; width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto; text-align: left; position: relative; }
+        .close-modal { position: absolute; top: 20px; right: 20px; background: #e74c3c; color: white; border: none; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+
+        .item-row { display: flex; justify-content: space-between; align-items: center; background: #f8f9fa; padding: 12px; margin: 8px 0; border-radius: 8px; border-left: 5px solid var(--magic); transition: 0.3s; }
+        .item-used { opacity: 0.6; border-left-color: #95a5a6; background: #eaecee; }
+        .item-used .item-name, .item-used .item-desc { text-decoration: line-through; color: #7f8c8d; }
+    </style>
+</head>
+<body>
+
+    <div id="syncStatus" class="sync-badge">⚡ 星網閃瞬同步完成</div>
+
+    <div class="nav-buttons">
+        <button onclick="openInventory()" style="background:#d35400; font-weight:bold; border-color:#f39c12;">🎒 聖物圖鑑 (背包)</button>
+        <button id="btn-settings" onclick="switchTab('settings')">⚙️ 神殿中樞</button>
+        <button id="btn-setup" onclick="switchTab('setup')">👥 締結契約</button>
+        <button id="btn-map" onclick="switchTab('map')" class="active-nav">🗺️ 星圖疆域</button>
+        <button id="btn-trpg" onclick="switchTab('trpg')">🔮 探索秘境</button>
+        <button id="btn-npc" onclick="switchTab('npc')">🎁 神匣賜福</button>
+    </div>
+
+    <!-- =============== 介面 0：中樞設定 =============== -->
+    <div id="settings" class="card">
+        <h3 style="color: var(--magic);">⚙️ 神殿中樞 (終極光速版)</h3>
+
+        <div id="syncStatusUI">📡 <b>等待星塵連結輸入...</b></div>
+
+        <div style="text-align: left; padding: 10px; background: #e8f8f5; border-left: 4px solid #2ecc71; margin-bottom: 15px;">
+            <strong>【一鍵光速同步區】</strong><br>
+            <span style="font-size: 14px; color: #555;">輸入秘語，宇宙中所有設備將在毫秒間相連。</span>
+        </div>
+        <input type="text" id="syncCodeInput" placeholder="房間秘密咒語 (如: nova123)">
+
+        <hr style="border:0; border-top:1px solid #ddd; margin: 20px 0;">
+
+        <div style="text-align: left; padding: 10px; background: #ebf5fb; border-left: 4px solid #3498db; margin-bottom: 15px;">
+            <strong>【AI 先知設定】</strong>
+        </div>
+        <input type="password" id="apiKeyInput" placeholder="請貼上 DeepSeek API 金鑰">
+        <input type="text" id="apiUrlInput" value="https://api.deepseek.com/v1/chat/completions" placeholder="API URL">
+
+        <button class="action-btn" onclick="saveSettings()" style="background: var(--magic);">✨ 啟動光速同步陣列</button>
+        <button onclick="clearAllData()" style="background: #c0392b; color: white; width:100%; max-width:400px; padding:15px; font-size:18px; border-radius:10px; margin-top:15px; border:none; cursor:pointer;">⚠️ 清空並重置世界</button>
+    </div>
+
+    <!-- =============== 介面 1：隊伍設定 =============== -->
+    <div id="setup" class="card">
+        <h3>👥 創建隊伍</h3>
+        <input type="text" id="newTeamName" placeholder="輸入隊伍名稱">
+        <div class="color-selector">
+            <div class="color-option" data-color="blue" onclick="selectColor(this)"></div>
+            <div class="color-option" data-color="green" onclick="selectColor(this)"></div>
+            <div class="color-option" data-color="yellow" onclick="selectColor(this)"></div>
+        </div>
+        <button class="action-btn" onclick="addTeam()">➕ 寫入星盤</button>
+        <div id="teamListContainer" style="margin-top: 25px; text-align: left; font-size: 18px;"></div>
+    </div>
+
+    <!-- =============== 介面 2：地圖據點與佔旗 (含實體封鎖) =============== -->
+    <div id="map" class="card active" style="max-width: 900px;">
+        <h3>🗺️ 星圖疆域</h3>
+        <p style="color:#7f8c8d; font-size:14px;">工作人員可使用右上角按鈕將據點「封鎖一輪」，封鎖後將變灰並無法切換佔領。</p>
+        <div id="mapContainer" class="map-grid"></div>
+    </div>
+
+    <!-- =============== 介面 3：探索秘境 (事件生成) =============== -->
+    <div id="trpg" class="card">
+        <h3>🔮 探索秘境與命運神諭</h3>
+        <p style="color:#7f8c8d; font-size:14px;">在此抽取情境事件，AI會根據玩家的反應，將結局導向預設的命運。</p>
+
+        <select id="eventTeamSelect"><option value="">-- 完成據點的隊伍 --</option></select>
+        <select id="zoneSelect">
+            <option value="精靈迷航森林">🌳 精靈迷航森林</option>
+            <option value="巨龍隕落廢墟">🐉 巨龍隕落廢墟</option>
+            <option value="星光幻影湖泊">🌊 星光幻影湖泊</option>
+            <option value="狂風元素高地">🌪️ 狂風元素高地</option>
+        </select>
+        <button class="action-btn" onclick="drawEvent()">🎲 觸發此地異象</button>
+
+        <div id="eventDisplay" style="margin: 20px 0; font-weight: bold; color: var(--primary); font-size: 20px;"></div>
+
+        <input type="text" id="playerAction" placeholder="請輸入團隊的應對動作 (如: 上去打招呼)" style="display:none; margin: 10px auto;">
+        <button id="submitActionBtn" class="action-btn" onclick="submitToAI()" style="display:none; background:#27ae60;">✨ 交給先知判定結局</button>
+
+        <div id="aiResult" class="result-box">等待事件觸發...</div>
+    </div>
+
+    <!-- =============== 介面 4：NPC 法寶 (抽取道具) =============== -->
+    <div id="npc" class="card">
+        <h3>🎁 神匣賜福 (抽取道具)</h3>
+        <p style="color:#7f8c8d; font-size:14px;">福禍相依的法寶，抽取後將自動存入隊伍的聖物圖鑑中。</p>
+
+        <select id="npcTeamSelect"><option value="">-- 領取道具的隊伍 --</option></select>
+        <button class="action-btn" onclick="giveItem()">🌟 祈耀神聖法寶</button>
+        <div id="itemResult" class="result-box" style="text-align: center;">尚未抽取...</div>
+    </div>
+
+    <!-- =============== 背包彈窗 Modal =============== -->
+    <div id="inventoryModal" class="modal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeInventory()">關閉</button>
+            <h2 style="color: var(--magic); margin-top: 0;">🎒 聖物圖鑑 (歷史紀錄)</h2>
+            <p style="font-size: 14px; color: #7f8c8d;">點擊消耗後，法寶會以<span style="text-decoration:line-through;">劃線形式</span>保留以供查核。</p>
+            <div id="inventoryContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        // ================= 核心設定與資料結構 =================
+        let config = { apiKey: "", apiUrl: "", syncCode: "" };
+        let gameState = {
+            timestamp: 0,
+            teams: [],
+            mapPoints: [
+                { id: 'p1', name: '📍 精靈迷航森林', ownerId: '', isLocked: false },
+                { id: 'p2', name: '📍 巨龍隕落廢墟', ownerId: '', isLocked: false },
+                { id: 'p3', name: '📍 星光幻影湖泊', ownerId: '', isLocked: false },
+                { id: 'p4', name: '📍 狂風元素高地', ownerId: '', isLocked: false }
+            ]
+        };
+
+        // 【預設命運 / 事件結局】(有好有壞)
+        const destinies = [
+            { text: "【星辰眷顧】(好)", desc: "天神降下好運！分數增加（具體增加多少數值由現場工作人員決定）。" },
+            { text: "【神匣餽贈】(好)", desc: "命運給予意外獎賞！隊伍可額外去工作人員那裡「免費抽取一次法寶道具」。" },
+            { text: "【真愛羈絆】(中性)", desc: "受奇妙魔法影響，隊伍中任意三人必須「手比愛心」，結伴同行走到下一個任務點。" },
+            { text: "【時光琥珀】(壞)", desc: "隊伍被倒流的時間封印，全隊必須「原地靜止站立三分鐘」不得有任何動作。" },
+            { text: "【虛空封印】(壞)", desc: "觸發古老禁制！工作人員必須將目前這個據點「手動封鎖一輪」，期間禁止任何隊伍挑戰。" },
+            { text: "【真理之門】(壞)", desc: "智慧之神降下迷霧，隊伍必須正確回答工作人員準備的一道謎題，剛才的據點成績才算有效。" }
+        ];
+
+        // 【法寶神匣 / 道具】(明碼介紹)
+        const itemPool = [
+            { name: "【繁星倒影】", detail: "恩賜：完成並佔領一個據點後，可使用此道具直接「同步佔領」另一個無主的空據點。" },
+            { name: "【榮耀加護】", detail: "恩賜：使用後，自動增加己方在當前遊戲點的成績總和。" },
+            { name: "【守護光盾】", detail: "恩賜：可抵消一次任何形式的懲罰或扣分。" },
+            { name: "【命運偷換】", detail: "策略：將任一「已被佔領」的旗幟，隨機更換為另外一隊的旗幟。" },
+            { name: "【幻影微風】", detail: "中性：一陣清風拂過，什麼也沒發生（這是一張空白道具）。" },
+            { name: "【虛無吞噬】", detail: "災厄：厄運降臨！必須指定交出己方已佔領的一個據點，使其變回無主之地。" },
+            { name: "【沉重枷鎖】", detail: "災厄：下一輪挑戰遊戲點時，該隊伍的過關門檻提高或直接扣除少量積分。" }
+        ];
+
+        // 秘境四區的環境開場白
+        const regionEvents = {
+            "精靈迷航森林": ["樹叢裡跳出一隻頭戴花冠的精靈，手裡拿著發光的果實看著你們。", "你們踩到了一圈由發光蘑菇組成的陣法，周圍飄舞起綠色的光點。"],
+            "巨龍隕落廢墟": ["殘破的巨龍骸骨突然發出微光，一顆佈滿裂痕的龍晶掉了出來。", "廢墟深處傳來低沉的龍吟，地面的石板開始微微震動。"],
+            "星光幻影湖泊": ["湖面倒映出宇宙的星河，一隻半透明的水元素從湖面探出了半個身子。", "岸邊的水晶蘆葦發出叮噹聲，似乎在引誘你們靠近。"],
+            "狂風元素高地": ["狂風在你們面前聚集，形成了一個小型的風暴精靈擋住了去路。", "天上的雷雲突然低垂，一塊靜止的懸浮巨石開始劇烈搖晃。"]
+        };
+
+        let mqttClient = null;
+        let starTopic = "";
+        let selectedTeamColor = "";
+        let currentEvent = "";
+        let currentDestiny = null;
+
+        window.onload = () => {
+            const savedConfig = localStorage.getItem('nova_config_final');
+            if (savedConfig) {
+                config = JSON.parse(savedConfig);
+                document.getElementById('apiKeyInput').value = config.apiKey || "";
+                document.getElementById('apiUrlInput').value = config.apiUrl || "https://api.deepseek.com/v1/chat/completions";
+                document.getElementById('syncCodeInput').value = config.syncCode || "";
+            }
+            if(config.syncCode) connectStarNetwork();
+            updateUI();
+        };
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.card').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.nav-buttons button').forEach(b => b.classList.remove('active-nav'));
+            document.getElementById(tabId).classList.add('active');
+            document.getElementById('btn-' + tabId).classList.add('active-nav');
+        }
+
+        // ================= 光速同步連線模組 =================
+        function connectStarNetwork() {
+            if(!config.syncCode) return;
+            const ui = document.getElementById('syncStatusUI');
+            starTopic = `nova/universe/final/${config.syncCode}`;
+            if(mqttClient) mqttClient.end();
+            mqttClient = mqtt.connect("wss://test.mosquitto.org:8081");
+
+            mqttClient.on("connect", () => {
+                ui.style.display = "block"; ui.style.background = '#e8f8f5'; ui.style.borderColor = '#2ecc71'; ui.style.color = '#27ae60';
+                ui.innerHTML = `🟢 <b>星塵光速連線完美！(零延遲)</b><br><span style="font-size:14px; color:#555;">已鎖定房號：【${config.syncCode}】</span>`;
+                mqttClient.subscribe(starTopic);
+            });
+
+            mqttClient.on("message", (topic, message) => {
+                try {
+                    const receivedData = JSON.parse(message.toString());
+                    if(receivedData.timestamp > gameState.timestamp) {
+                        gameState = receivedData;
+                        updateUI();
+                        const badge = document.getElementById('syncStatus');
+                        badge.style.display = 'block';
+                        setTimeout(() => badge.style.display = 'none', 1000);
+                    }
+                } catch(e) {}
+            });
+        }
+
+        function syncToCloud() {
+            if(!mqttClient || !starTopic) return;
+            gameState.timestamp = Date.now();
+            mqttClient.publish(starTopic, JSON.stringify(gameState), { retain: true });
+            updateUI();
+        }
+
+        function saveSettings() {
+            config.apiKey = document.getElementById('apiKeyInput').value.trim();
+            config.apiUrl = document.getElementById('apiUrlInput').value.trim();
+            config.syncCode = document.getElementById('syncCodeInput').value.trim();
+            if(!config.syncCode) return alert("秘密咒語不能為空！");
+            localStorage.setItem('nova_config_final', JSON.stringify(config));
+            connectStarNetwork();
+        }
+
+        function clearAllData() {
+            if(confirm("確定要將整個星盤歸零嗎？所有隊伍與道具將灰飛煙滅。")) {
+                gameState.teams = [];
+                gameState.mapPoints.forEach(p => { p.ownerId = ''; p.isLocked = false; });
+                syncToCloud();
+            }
+        }
+
+        // ================= UI 與基本邏輯 =================
+        function selectColor(element) {
+            document.querySelectorAll('.color-option').forEach(el => el.classList.remove('selected'));
+            element.classList.add('selected');
+            selectedTeamColor = element.getAttribute('data-color');
+        }
+
+        function getColorHex(c) {
+            if(c === 'blue') return 'rgba(52, 152, 219, 0.4)'; if(c === 'green') return 'rgba(46, 204, 113, 0.4)'; if(c === 'yellow') return 'rgba(241, 196, 15, 0.4)'; return '#ffffff';
+        }
+        function getDarkColorHex(c) {
+            if(c === 'blue') return '#2980b9'; if(c === 'green') return '#27ae60'; if(c === 'yellow') return '#d35400'; return '#ccc';
+        }
+
+        function addTeam() {
+            const name = document.getElementById('newTeamName').value.trim();
+            if(!name || !selectedTeamColor) return alert("請輸入隊伍名稱並選擇專屬星色！");
+            gameState.teams.push({ id: Date.now().toString(), name: name, color: selectedTeamColor, items: [] });
+            document.getElementById('newTeamName').value = "";
+            syncToCloud();
+        }
+
+        function changeOwner(pointId, newOwnerId) {
+            const p = gameState.mapPoints.find(p => p.id === pointId);
+            if(p && !p.isLocked) { p.ownerId = newOwnerId; syncToCloud(); }
+        }
+
+        function toggleLock(pointId) {
+            const p = gameState.mapPoints.find(p => p.id === pointId);
+            if(p) { p.isLocked = !p.isLocked; syncToCloud(); }
+        }
+
+        // ================= 道具系統 (劃線不消失) =================
+        function giveItem() {
+            const teamId = document.getElementById('npcTeamSelect').value;
+            if(!teamId) return alert("請先選擇要賜福的隊伍！");
+
+            const t = gameState.teams.find(t => t.id === teamId);
+            const drawn = itemPool[Math.floor(Math.random() * itemPool.length)];
+
+            t.items.push({ name: drawn.name, desc: drawn.detail, used: false });
+            syncToCloud();
+
+            document.getElementById('itemResult').innerHTML = `
+                <div style="font-size:16px;">神明賜予了 <b>${t.name}</b>：</div>
+                <div style="color:var(--magic); font-size:26px; font-weight:bold; margin:10px 0;">${drawn.name}</div>
+                <div style="color:#555; font-size:16px; background:#f4f6f7; padding:10px; border-radius:8px;">📜 ${drawn.detail}</div>
+                <hr style="margin: 15px 0;">
+                <span style="color:#27ae60; font-weight:bold;">✔ 已自動保存在背包圖鑑中！</span>
+            `;
+        }
+
+        function openInventory() { document.getElementById('inventoryModal').style.display = 'flex'; renderInventory(); }
+        function closeInventory() { document.getElementById('inventoryModal').style.display = 'none'; }
+
+        function useItem(teamId, itemIndex) {
+            const t = gameState.teams.find(t => t.id === teamId);
+            if(t && confirm(`確定要『消耗』此道具嗎？\n它不會消失，但會被劃線標記。`)){
+                t.items[itemIndex].used = true;
+                syncToCloud();
+                renderInventory();
+            }
+        }
+
+        function renderInventory() {
+            const container = document.getElementById('inventoryContainer');
+            if(gameState.teams.length === 0) { container.innerHTML = "<p>尚未締結任何隊伍。</p>"; return; }
+
+            container.innerHTML = gameState.teams.map(t => {
+                const itemsHtml = t.items.map((itemObj, idx) => {
+                    if (itemObj.used) {
+                        return `
+                        <div class="item-row item-used">
+                            <div>
+                                <span class="item-name" style="font-weight:bold;">🔸 ${itemObj.name}</span><br>
+                                <span class="item-desc" style="font-size:12px;">${itemObj.desc}</span>
+                            </div>
+                            <span style="color:#e74c3c; font-weight:bold; font-size:14px;">(已消耗)</span>
+                        </div>`;
+                    } else {
+                        return `
+                        <div class="item-row">
+                            <div>
+                                <span class="item-name" style="font-weight:bold; color:var(--primary);">🔸 ${itemObj.name}</span><br>
+                                <span class="item-desc" style="font-size:12px; color:#555;">${itemObj.desc}</span>
+                            </div>
+                            <button onclick="useItem('${t.id}', ${idx})" style="background:#e67e22; color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; font-weight:bold; width:80px;">消耗</button>
+                        </div>`;
+                    }
+                }).join('') || `<div style="color:#aaa; font-style:italic; padding: 10px;">圖鑑中空空如也...</div>`;
+
+                return `
+                <div style="margin-bottom:20px; border:2px solid ${getDarkColorHex(t.color)}; border-radius:10px; overflow:hidden;">
+                    <div style="background:${getColorHex(t.color)}; padding:10px 15px; font-weight:bold; font-size:18px; color:#2c3e50;">${t.name} 的背包</div>
+                    <div style="padding:10px;">${itemsHtml}</div>
+                </div>`;
+            }).join('');
+        }
+
+        // ================= AI 事件系統 =================
+        function drawEvent() {
+            const zone = document.getElementById('zoneSelect').value;
+            currentEvent = regionEvents[zone][Math.floor(Math.random() * regionEvents[zone].length)];
+            currentDestiny = destinies[Math.floor(Math.random() * destinies.length)];
+
+            document.getElementById('eventDisplay').innerText = `【區域異象】：${currentEvent}`;
+            document.getElementById('playerAction').style.display = 'block';
+            document.getElementById('submitActionBtn').style.display = 'block';
+            document.getElementById('aiResult').innerHTML = "請描述隊伍的行為，AI 將把結局導向神聖的預設命運。";
+            document.getElementById('playerAction').value = "";
+        }
+
+        async function submitToAI() {
+            if(!config.apiKey) return alert("請至神殿中樞填寫 API 金鑰！");
+            const action = document.getElementById('playerAction').value;
+            const teamId = document.getElementById('eventTeamSelect').value;
+            if(!action || !teamId) return alert("請輸入動作並選擇隊伍！");
+
+            const activeTeam = gameState.teams.find(t=>t.id===teamId);
+            const resultBox = document.getElementById('aiResult');
+            const btn = document.getElementById('submitActionBtn');
+            btn.disabled = true;
+            resultBox.innerHTML = "✨ 星河運算中...先知正在編織故事...<br><br>";
+
+            const systemPrompt = `你是一個魔法世界的嚮導。
+事件：【${currentEvent}】
+玩家隊伍【${activeTeam.name}】的反應是：【${action}】。
+
+你的任務：
+1. 順著玩家的動作寫一段約100字的情節。
+2. 故事結果必須無縫且合理地導致這個強制命運發生：【${currentDestiny.desc}】
+3. 在故事最後一行，請獨立換行並加粗寫上官方判決：【最終判決：${currentDestiny.text}】`;
+
+            try {
+                const response = await fetch(config.apiUrl, {
+                    method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${config.apiKey}` },
+                    body: JSON.stringify({ model: "deepseek-chat", messages: [{"role": "system", "content": systemPrompt}], temperature: 0.8, stream: true })
+                });
+
+                if(!response.ok) throw new Error("大腦連結失敗");
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let aiText = "";
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split("\n");
+                    for (const line of lines) {
+                        if (line.startsWith("data: ") && line !== "data: [DONE]") {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                if (data.choices[0].delta.content) {
+                                    aiText += data.choices[0].delta.content;
+                                    resultBox.innerHTML = aiText.replace(/\n/g, '<br>');
+                                }
+                            } catch(e) {}
+                        }
+                    }
+                }
+
+                resultBox.innerHTML += `
+                    <hr style="margin:15px 0; border: 1px solid #bdc3c7;">
+                    <div style="color:#d35400; font-weight:bold; text-align:center;">工作人員請確保團隊執行這項判決。</div>
+                `;
+
+            } catch(e) {
+                resultBox.innerText = "魔法連接失敗：" + e.message;
+            }
+            btn.disabled = false;
+        }
+
+        // ================= 統一更新畫面 =================
+        function updateUI() {
+            // 更新隊伍列表
+            document.getElementById('teamListContainer').innerHTML = gameState.teams.map(t =>
+                `<div style="background:${getColorHex(t.color)}; padding:15px; border-radius:10px; margin-bottom:10px; border-left:6px solid ${getDarkColorHex(t.color)};">
+                    <strong>${t.name}</strong>
+                </div>`
+            ).join('');
+
+            // 更新下拉選單
+            let teamOptions = `<option value="">-- 請選擇隊伍 --</option>` + gameState.teams.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+            document.getElementById('eventTeamSelect').innerHTML = teamOptions;
+            document.getElementById('npcTeamSelect').innerHTML = teamOptions;
+
+            let ownerOptions = `<option value="">🏳️ 無主之地</option>` + gameState.teams.map(t => `<option value="${t.id}">🚩 ${t.name}</option>`).join('');
+
+            // 更新地圖與封鎖狀態
+            document.getElementById('mapContainer').innerHTML = gameState.mapPoints.map(p => {
+                const ownerInfo = gameState.teams.find(t => t.id === p.ownerId);
+                const bgColor = p.isLocked ? '#ecf0f1' : (ownerInfo ? getColorHex(ownerInfo.color) : '#ffffff');
+                const borderColor = p.isLocked ? '#95a5a6' : (ownerInfo ? getDarkColorHex(ownerInfo.color) : '#eee');
+                const lockClass = p.isLocked ? 'locked' : '';
+                const lockBtnText = p.isLocked ? '🔓 解除封印' : '🔒 封鎖一輪';
+                const lockBtnClass = p.isLocked ? 'lock-btn locked-btn-style' : 'lock-btn';
+
+                return `
+                <div class="map-point ${lockClass}" style="background-color: ${bgColor}; border-color: ${borderColor};">
+                    <button class="${lockBtnClass}" onclick="toggleLock('${p.id}')">${lockBtnText}</button>
+                    <div class="title">${p.name} ${p.isLocked ? '<span style="color:#e74c3c; font-size:16px;">(⛔ 已封鎖)</span>' : ''}</div>
+                    <select onchange="changeOwner('${p.id}', this.value)" style="width:100%; padding:10px; font-size:16px;" ${p.isLocked ? 'disabled' : ''}>
+                        ${ownerOptions.replace(`value="${p.ownerId}"`, `value="${p.ownerId}" selected`)}
+                    </select>
+                </div>
+            `}).join('');
+
+            // 若背包開著，自動連動更新
+            if(document.getElementById('inventoryModal').style.display === 'flex') {
+                renderInventory();
+            }
+        }
+    </script>
+</body>
+</html>
